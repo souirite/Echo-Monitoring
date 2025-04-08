@@ -2,20 +2,21 @@
 import time
 from datetime import datetime
 from ..utils.logger import logger
+from .database import Database
 
 class BitMonitor:
     def __init__(self, plc_connection, db_number, start_byte, end_byte, poll_interval=1.0):
         """Initialize bit monitoring with a PLC connection."""
         self.plc = plc_connection
+        self.db = None  # Defer database creation to monitor_task
         self.db_number = db_number
         self.start_byte = start_byte
         self.end_byte = end_byte
         self.poll_interval = poll_interval
         self.size = end_byte - start_byte + 1
         self.bit_states = {}
-        self._stop_event = None  # Set by start_monitoring
+        self._stop_event = None
 
-        # Initialize bit states for the range (e.g., 328 bits for bytes 20-60)
         for byte_offset in range(self.size):
             for bit_offset in range(8):
                 bit_index = (byte_offset * 8) + bit_offset
@@ -29,6 +30,7 @@ class BitMonitor:
     def monitor_task(self, stop_event):
         """Background task to monitor bits in a DB range."""
         self._stop_event = stop_event
+        self.db = Database()  # Create database connection in this thread
         logger.info(f"Starting bit monitoring on DB{self.db_number}, bytes {self.start_byte}-{self.end_byte} in background")
 
         while not self._stop_event.is_set():
@@ -54,11 +56,13 @@ class BitMonitor:
                                 self.bit_states[bit_index]['state'] = 0
                                 self.bit_states[bit_index]['start_time'] = None
                                 logger.info(f"Bit {bit_position} turned OFF at {end_time}, duration: {duration:.2f}s")
-                                self.plc.db.save_bit_event(bit_position, start_time, end_time, duration)
+                                self.db.save_bit_event(bit_position, start_time, end_time, duration)
 
                 time.sleep(self.poll_interval)
             except Exception as e:
                 logger.error(f"Monitoring error in background task: {str(e)}")
                 break
-
+        
+        if self.db:
+            self.db.close()  # Close the connection if it was created
         logger.info("Background monitoring stopped")

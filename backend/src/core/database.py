@@ -3,16 +3,20 @@ import sqlite3
 from pathlib import Path
 from ..utils.logger import logger
 from .config import DB_PATH
-from .models import initialize_tables  # Import table setup
+from .models import initialize_tables
 
 class Database:
     def __init__(self, db_path=DB_PATH):
         """Initialize SQLite database connection."""
-        self.db_path = Path(__file__).parent.parent.parent / db_path
-        self.db_path.parent.mkdir(exist_ok=True)
+        # Resolve path from backend/ directory explicitly
+        backend_dir = Path(__file__).parent.parent.parent  # Should be backend/
+        self.db_path = backend_dir / db_path  # e.g., backend/data/bit_events.db
+        logger.debug(f"Resolved database path: {self.db_path}")
+        
+        self.db_path.parent.mkdir(exist_ok=True)  # Create data/ if it doesn’t exist
         self.conn = sqlite3.connect(self.db_path)
         self.cursor = self.conn.cursor()
-        initialize_tables(self.cursor)  # Use models.py to create tables
+        initialize_tables(self.cursor)
         self.conn.commit()
         logger.info(f"SQLite database initialized at {self.db_path}")
 

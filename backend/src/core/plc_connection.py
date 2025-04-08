@@ -1,20 +1,18 @@
 # backend/src/core/plc_connection.py
 import snap7
 import threading
-from ..utils.logger import logger
+from ..utils.logger  import logger
 from .config import PLC_IP, PLC_RACK, PLC_SLOT
-from .database import Database
 from .monitor import BitMonitor
 
 class PLCConnection:
     def __init__(self, ip_address=PLC_IP, rack=PLC_RACK, slot=PLC_SLOT):
-        """Initialize PLC connection parameters and database."""
+        """Initialize PLC connection parameters."""
         self.ip_address = ip_address
         self.rack = rack
         self.slot = slot
         self.client = snap7.client.Client()
         self.connected = False
-        self.db = Database()
         self.monitor = None
         self.monitoring_thread = None
         self._stop_event = threading.Event()
@@ -32,9 +30,9 @@ class PLCConnection:
             raise
 
     def disconnect(self):
-        """Close the PLC connection and database."""
+        """Close the PLC connection."""
         try:
-            self.stop_monitoring()  # Ensure monitoring stops before disconnect
+            self.stop_monitoring()
             if self.connected:
                 self.client.disconnect()
                 self.connected = False
@@ -42,8 +40,6 @@ class PLCConnection:
         except Exception as e:
             logger.error(f"Failed to disconnect: {str(e)}")
             raise
-        finally:
-            self.db.close()
 
     def is_connected(self):
         """Check if the connection is active."""
@@ -77,7 +73,6 @@ class PLCConnection:
         if self.monitoring_thread and self.monitoring_thread.is_alive():
             logger.warning("Monitoring is already running")
             return
-
         self.monitor = BitMonitor(self, db_number, start_byte, end_byte, poll_interval)
         self._stop_event.clear()
         self.monitoring_thread = threading.Thread(
