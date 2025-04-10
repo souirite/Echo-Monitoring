@@ -1,34 +1,45 @@
+<!-- frontend/src/components/Faults.vue -->
 <template>
   <div>
-    <h2>Actual Faults</h2>
-    <table v-if="faults.length">
+    <h2>Actual Faults - Station {{ selectedStation }}</h2>
+    <table v-if="filteredFaults.length">
       <thead>
         <tr>
-          <th>Bit Position</th>  <!-- New column for DBxxxx.DBXxx.x -->
+          <th>Bit Position</th>
           <th>Description</th>
           <th>State</th>
         </tr>
       </thead>
       <tbody>
-        <tr v-for="fault in faults" :key="fault.position">
-          <td>{{ fault.position }}</td>  <!-- Display bit position -->
+        <tr v-for="fault in filteredFaults" :key="fault.position">
+          <td>{{ fault.position }}</td>
           <td>{{ fault.description }}</td>
           <td>{{ fault.state ? 'Active' : 'Inactive' }}</td>
         </tr>
       </tbody>
     </table>
-    <p v-else>No active faults</p>
+    <p v-else>No active faults for Station {{ selectedStation }}</p>
   </div>
 </template>
 
 <script>
 export default {
   name: 'Faults',
+  props: {
+    selectedStation: { type: Number, required: true }
+  },
   data() {
     return {
       faults: [],
       ws: null
     };
+  },
+  computed: {
+    filteredFaults() {
+      const filtered = this.faults.filter(fault => this.getStationNumber(fault.position) === this.selectedStation && fault.state);
+      console.log(`Filtered faults for Station ${this.selectedStation}:`, filtered);
+      return filtered;
+    }
   },
   mounted() {
     this.connectWebSocket();
@@ -41,12 +52,19 @@ export default {
       this.ws = new WebSocket('ws://localhost:8000/ws/bits');
       this.ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        console.log('WebSocket data received:', data);
         if (data.type === 'plc_update') {
-          this.faults = data.data.filter(fault => fault.state); // Show only active faults
+          this.faults = data.data;
+          console.log('All faults stored:', this.faults);
+          this.$emit('faults-updated', this.faults.filter(fault => fault.state));
         }
       };
       this.ws.onclose = () => console.log('WebSocket closed');
       this.ws.onerror = (error) => console.error('WebSocket error:', error);
+    },
+    getStationNumber(position) {
+      const dbNumber = parseInt(position.match(/DB(\d+)\.DBX/)[1], 10);
+      return Math.floor((dbNumber - 1020) / 1000) + 1;
     }
   }
 };

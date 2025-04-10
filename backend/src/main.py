@@ -15,7 +15,7 @@ from core.config import DB_PATH
 from utils.logger import logger
 import asyncio
 from contextlib import asynccontextmanager
-from typing import List
+from typing import List, Dict
 from starlette.websockets import WebSocketDisconnect
 
 # Load alarm map
@@ -60,7 +60,7 @@ class ConnectionManager:
             logger.error(f"Error sending to client: {str(e)}")
             await self.disconnect(websocket)
 
-    async def broadcast_plc_state(self):
+   
         """Broadcast current PLC state to all connected clients"""
         async with self._lock:
             if not self.active_connections:
@@ -90,6 +90,38 @@ class ConnectionManager:
             for connection in disconnected:
                 self.active_connections.remove(connection)
                 logger.info(f"Removed disconnected client. Total: {len(self.active_connections)}")
+
+    def _get_all_station_bits(self) -> List[Dict]:
+        all_bits = []
+        for db_number, monitor in plc.monitors.items():
+            if monitor and monitor.bit_states:
+                bits = [
+                    {
+                        "position": f"DB{db_number}.DBX{monitor.start_byte + (idx // 8)}.{idx % 8}",
+                        "state": state["state"],
+                        "description": ALARM_MAP.get(f"DB{db_number}.DBX{monitor.start_byte + (idx // 8)}.{idx % 8}", "Unknown Fault")
+                    }
+                    for idx, state in monitor.bit_states.items()
+                ]
+                all_bits.extend(bits)
+        logger.info(f"All bits prepared for WebSocket: {all_bits}")  # Detailed log
+        return all_bits
+
+    async def broadcast_plc_state(self):
+        async with self._lock:
+            if not self.active_connections:
+                return
+            disconnected = []
+            all_bits = self._get_all_station_bits()
+            message = json.dumps({"type": "plc_update", "data": all_bits})
+            logger.debug(f"Broadcasting WebSocket message: {message}")
+            for connection in self.active_connections:
+                try:
+                    await connection.send_text(message)
+                except (WebSocketDisconnect, RuntimeError):
+                    disconnected.append(connection)
+            for connection in disconnected:
+                self.active_connections.remove(connection)
 
 manager = ConnectionManager()
 
