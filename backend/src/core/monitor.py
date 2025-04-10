@@ -1,14 +1,13 @@
 # backend/src/core/monitor.py
 import time
 from datetime import datetime
-from ..utils.logger import logger
+from utils.logger import logger
 from .database import Database
 
 class BitMonitor:
     def __init__(self, plc_connection, db_number, start_byte, end_byte, poll_interval=1.0):
-        """Initialize bit monitoring with a PLC connection."""
         self.plc = plc_connection
-        self.db = None  # Defer database creation to monitor_task
+        self.db = None
         self.db_number = db_number
         self.start_byte = start_byte
         self.end_byte = end_byte
@@ -23,15 +22,24 @@ class BitMonitor:
                 self.bit_states[bit_index] = {'state': 0, 'start_time': None}
 
     def get_bit(self, data, byte_offset, bit_offset):
-        """Extract a specific bit from a bytearray."""
         byte = data[byte_offset]
         return (byte >> bit_offset) & 1
 
+    def _is_database_ready(self):
+        try:
+            self.db.cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='bit_events'")
+            return self.db.cursor.fetchone() is not None
+        except Exception as e:
+            logger.error(f"Error checking database readiness: {str(e)}")
+            return False
+
     def monitor_task(self, stop_event):
-        """Background task to monitor bits in a DB range."""
         self._stop_event = stop_event
-        self.db = Database()  # Create database connection in this thread
+        self.db = Database()
         logger.info(f"Starting bit monitoring on DB{self.db_number}, bytes {self.start_byte}-{self.end_byte} in background")
+
+        if not self._is_database_ready():
+            logger.warning("Database table 'bit_events' not found. Proceeding without saving events.")
 
         while not self._stop_event.is_set():
             try:
@@ -44,7 +52,7 @@ class BitMonitor:
                         prev_state = self.bit_states[bit_index]['state']
 
                         if current_state != prev_state:
-                            bit_position = f"DB{self.db_number}.{self.start_byte + byte_offset}.{bit_offset}"
+                            bit_position = f"DB{self.db_number}.DBX{self.start_byte + byte_offset}.{bit_offset}"
                             if current_state == 1:
                                 self.bit_states[bit_index]['state'] = 1
                                 self.bit_states[bit_index]['start_time'] = datetime.now()
@@ -56,13 +64,17 @@ class BitMonitor:
                                 self.bit_states[bit_index]['state'] = 0
                                 self.bit_states[bit_index]['start_time'] = None
                                 logger.info(f"Bit {bit_position} turned OFF at {end_time}, duration: {duration:.2f}s")
-                                self.db.save_bit_event(bit_position, start_time, end_time, duration)
+                                if self._is_database_ready():
+                                    self.db.save_bit_event(bit_position, start_time, end_time, duration)
+                                else:
+                                    logger.warning(f"Skipping save for {bit_position} due to database issue")
 
+                logger.debug(f"Current bit states: {self.bit_states}")
                 time.sleep(self.poll_interval)
             except Exception as e:
                 logger.error(f"Monitoring error in background task: {str(e)}")
                 break
         
         if self.db:
-            self.db.close()  # Close the connection if it was created
+            self.db.close()
         logger.info("Background monitoring stopped")

@@ -1,7 +1,7 @@
 # backend/src/core/database.py
 import sqlite3
 from pathlib import Path
-from ..utils.logger import logger
+from utils.logger import logger
 from .config import DB_PATH
 from .models import initialize_tables
 

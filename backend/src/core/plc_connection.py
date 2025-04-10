@@ -1,13 +1,12 @@
 # backend/src/core/plc_connection.py
 import snap7
 import threading
-from ..utils.logger  import logger
+from utils.logger import logger
 from .config import PLC_IP, PLC_RACK, PLC_SLOT
 from .monitor import BitMonitor
 
 class PLCConnection:
     def __init__(self, ip_address=PLC_IP, rack=PLC_RACK, slot=PLC_SLOT):
-        """Initialize PLC connection parameters."""
         self.ip_address = ip_address
         self.rack = rack
         self.slot = slot
@@ -18,7 +17,6 @@ class PLCConnection:
         self._stop_event = threading.Event()
 
     def connect(self):
-        """Establish connection to the PLC."""
         try:
             if not self.connected:
                 self.client.connect(self.ip_address, self.rack, self.slot)
@@ -30,7 +28,6 @@ class PLCConnection:
             raise
 
     def disconnect(self):
-        """Close the PLC connection."""
         try:
             self.stop_monitoring()
             if self.connected:
@@ -42,11 +39,9 @@ class PLCConnection:
             raise
 
     def is_connected(self):
-        """Check if the connection is active."""
         return self.connected and self.client.get_connected()
 
     def read_data(self, db_number, start_byte, size):
-        """Read data from a specific DB in the PLC."""
         try:
             if not self.is_connected():
                 self.connect()
@@ -58,7 +53,6 @@ class PLCConnection:
             raise
 
     def write_data(self, db_number, start_byte, data):
-        """Write data to a specific DB in the PLC."""
         try:
             if not self.is_connected():
                 self.connect()
@@ -69,7 +63,6 @@ class PLCConnection:
             raise
 
     def start_monitoring(self, db_number, start_byte, end_byte, poll_interval=1.0):
-        """Start monitoring bits in a background thread."""
         if self.monitoring_thread and self.monitoring_thread.is_alive():
             logger.warning("Monitoring is already running")
             return
@@ -84,7 +77,6 @@ class PLCConnection:
         logger.info("Monitoring thread started")
 
     def stop_monitoring(self):
-        """Stop the background monitoring thread."""
         if self.monitoring_thread and self.monitoring_thread.is_alive():
             self._stop_event.set()
             self.monitoring_thread.join()

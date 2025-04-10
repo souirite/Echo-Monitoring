@@ -1,3 +1,7 @@
 python-snap7
 python-dotenv
 pytest
+fastapi
+uvicorn
+websockets
+asyncio

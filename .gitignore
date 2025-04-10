@@ -69,3 +69,50 @@ venv.bak/
 
 # VS Code
 .vscode/
+
+# Node dependencies
+node_modules/
+
+# Build output directory
+dist/
+
+# Development server cache
+.vite/
+
+# IDE and editor specific files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Package manager lock files (one should be kept, depending on your usage)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Local environment files (sensitive information)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Cache directories
+.cache/
+
+# Optional: Logs
+logs/
+*.log
+
+# Optional: Temporary files
+tmp/
+temp/
+*.tmp
+
+# Optional: Distribution/publish files (if different from build output)
+publish/
+
+# Optional: Coverage reports
+coverage/

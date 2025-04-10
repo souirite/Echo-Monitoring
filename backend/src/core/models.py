@@ -1,5 +1,5 @@
 # backend/src/core/models.py
-from ..utils.logger import logger
+from utils.logger import logger
 
 # SQL table creation statement
 BIT_EVENTS_TABLE = """
