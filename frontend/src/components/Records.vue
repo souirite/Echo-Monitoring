@@ -24,45 +24,32 @@
     <p v-else>{{ error || 'No records found' }}</p>
   </div>
 </template>
-
 <script>
-import axios from 'axios';
-
 export default {
   name: 'Records',
   data() {
     return {
-      records: [],
-      error: null
+      records: []
     };
   },
   mounted() {
-    console.log('Records component mounted');
     this.fetchRecords();
   },
   methods: {
     async fetchRecords() {
       try {
-        console.log('Fetching records from http://localhost:8000/records');
-        const response = await axios.get('http://localhost:8000/records');
-        console.log('Records data:', response.data);
-        if (response.data.error) {
-          this.error = response.data.error;
-          this.records = [];
-        } else {
-          this.records = Array.isArray(response.data) ? response.data : [];
-          this.error = null;
-        }
+        const response = await fetch('http://localhost:8000/records');
+        console.log('Response status:', response.status);
+        if (!response.ok) throw new Error(`Failed to fetch records: ${response.statusText}`);
+        this.records = await response.json();
+        console.log('Records fetched:', this.records);
       } catch (error) {
         console.error('Error fetching records:', error);
-        this.error = error.response?.data?.error || 'Failed to fetch records';
-        this.records = [];
       }
     }
   }
 };
 </script>
-
 <style>
 table { width: 100%; border-collapse: collapse; }
 th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }

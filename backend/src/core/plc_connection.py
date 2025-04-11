@@ -1,86 +1,79 @@
-# backend/src/core/plc_connection.py
+# backend/core/plc_connection.py
 import snap7
-import threading
+from snap7.util import *
+import asyncio
+from typing import Dict
 from utils.logger import logger
-from .config import PLC_IP, PLC_RACK, PLC_SLOT
-from .monitor import BitMonitor
+
+class PLCMonitor:
+    def __init__(self):
+        self.bit_states = {}
+        self.running = False
+        self.db_number = None
+        self.start_byte = None
+        self.end_byte = None
+
+    async def monitor(self, client, db_number, start_byte, end_byte, poll_interval):
+        self.db_number = db_number
+        self.start_byte = start_byte
+        self.end_byte = end_byte
+        while self.running:
+            try:
+                if not client.get_connected():
+                    logger.warning(f"PLC disconnected for DB{db_number}, attempting reconnect...")
+                    client.connect('192.168.5.1', 0, 1)
+                    if client.get_connected():
+                        logger.info(f"Reconnected to PLC for DB{db_number}")
+                    else:
+                        logger.error(f"Failed to reconnect for DB{db_number}")
+                        await asyncio.sleep(5)  # Wait before retry
+                        continue
+                data = client.db_read(db_number, start_byte, end_byte - start_byte + 1)
+                logger.debug(f"Read {len(data)} bytes from DB{db_number}")
+                new_bit_states = {}
+                for byte_idx, byte in enumerate(data):
+                    for bit_idx in range(8):
+                        bit_value = bool(byte & (1 << (7 - bit_idx)))  # MSB-first
+                        new_bit_states[byte_idx * 8 + bit_idx] = {"state": bit_value}
+                self.bit_states = new_bit_states
+                await asyncio.sleep(poll_interval)
+            except Exception as e:
+                logger.error(f"Monitoring error for DB{db_number}: {str(e)}")
+                await asyncio.sleep(poll_interval)  # Avoid tight loop on error
 
 class PLCConnection:
-    def __init__(self, ip_address=PLC_IP, rack=PLC_RACK, slot=PLC_SLOT):
-        self.ip_address = ip_address
-        self.rack = rack
-        self.slot = slot
+    def __init__(self):
         self.client = snap7.client.Client()
-        self.connected = False
-        self.monitor = None
-        self.monitoring_thread = None
-        self._stop_event = threading.Event()
+        self.monitors: Dict[int, PLCMonitor] = {}
 
     def connect(self):
         try:
-            if not self.connected:
-                self.client.connect(self.ip_address, self.rack, self.slot)
-                self.connected = True
-                logger.info(f"Connected to PLC at {self.ip_address}")
+            logger.info("creating snap7 client")
+            self.client.connect('192.168.5.1', 0, 1)  # Adjust IP if needed
+            if self.client.get_connected():
+                logger.info("Connected to PLC")
+            else:
+                logger.error("Failed to connect to PLC")
         except Exception as e:
-            logger.error(f"Failed to connect to PLC: {str(e)}")
-            self.connected = False
-            raise
+            logger.error(f"PLC connection failed: {str(e)}")
 
     def disconnect(self):
-        try:
-            self.stop_monitoring()
-            if self.connected:
-                self.client.disconnect()
-                self.connected = False
-                logger.info(f"Disconnected from PLC at {self.ip_address}")
-        except Exception as e:
-            logger.error(f"Failed to disconnect: {str(e)}")
-            raise
+        self.client.disconnect()
+        logger.info("Disconnected from PLC")
 
-    def is_connected(self):
-        return self.connected and self.client.get_connected()
-
-    def read_data(self, db_number, start_byte, size):
-        try:
-            if not self.is_connected():
-                self.connect()
-            data = self.client.db_read(db_number, start_byte, size)
-            logger.debug(f"Read {size} bytes from DB{db_number} at {start_byte}")
-            return data
-        except Exception as e:
-            logger.error(f"Error reading data: {str(e)}")
-            raise
-
-    def write_data(self, db_number, start_byte, data):
-        try:
-            if not self.is_connected():
-                self.connect()
-            self.client.db_write(db_number, start_byte, data)
-            logger.info(f"Data written to DB{db_number} at {start_byte}")
-        except Exception as e:
-            logger.error(f"Error writing data: {str(e)}")
-            raise
-
-    def start_monitoring(self, db_number, start_byte, end_byte, poll_interval=1.0):
-        if self.monitoring_thread and self.monitoring_thread.is_alive():
-            logger.warning("Monitoring is already running")
-            return
-        self.monitor = BitMonitor(self, db_number, start_byte, end_byte, poll_interval)
-        self._stop_event.clear()
-        self.monitoring_thread = threading.Thread(
-            target=self.monitor.monitor_task,
-            args=(self._stop_event,),
-            daemon=True
-        )
-        self.monitoring_thread.start()
-        logger.info("Monitoring thread started")
+    def start_monitoring(self, db_number, start_byte, end_byte, poll_interval):
+        if db_number not in self.monitors:
+            self.monitors[db_number] = PLCMonitor()
+            self.monitors[db_number].running = True
+            asyncio.create_task(
+                self.monitors[db_number].monitor(self.client, db_number, start_byte, end_byte, poll_interval)
+            )
+            logger.info(f"Started monitoring DB{db_number}")
+        else:
+            logger.warning(f"Monitor for DB{db_number} already running")
 
     def stop_monitoring(self):
-        if self.monitoring_thread and self.monitoring_thread.is_alive():
-            self._stop_event.set()
-            self.monitoring_thread.join()
-            self.monitor = None
-            logger.info("Monitoring thread stopped")
-        else:
-            logger.info("No active monitoring thread to stop")
+        for monitor in self.monitors.values():
+            monitor.running = False
+        self.monitors.clear()
+        logger.info("Stopped all monitoring")

@@ -1,4 +1,3 @@
-<!-- frontend/src/components/Faults.vue -->
 <template>
   <div>
     <h2>Actual Faults - Station {{ selectedStation }}</h2>
@@ -26,7 +25,7 @@
 export default {
   name: 'Faults',
   props: {
-    selectedStation: { type: Number, required: true }
+    selectedStation: { type: Number, default: 1 }
   },
   data() {
     return {
@@ -36,7 +35,10 @@ export default {
   },
   computed: {
     filteredFaults() {
-      const filtered = this.faults.filter(fault => this.getStationNumber(fault.position) === this.selectedStation && fault.state);
+      const filtered = this.faults.filter(fault => {
+        const station = this.getStationNumber(fault.position);
+        return station === this.selectedStation && fault.state;
+      });
       console.log(`Filtered faults for Station ${this.selectedStation}:`, filtered);
       return filtered;
     }
@@ -53,23 +55,27 @@ export default {
       this.ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         console.log('WebSocket data received:', data);
-        if (data.type === 'plc_update') {
-          this.faults = data.data;
+        if (data.type === 'plc_update' && Array.isArray(data.data)) {
+          this.faults = data.data.filter(fault => fault && typeof fault.position === 'string' && fault.position.match(/DB\d+\.DBX/));
           console.log('All faults stored:', this.faults);
           this.$emit('faults-updated', this.faults.filter(fault => fault.state));
         }
       };
+      this.ws.onopen = () => console.log('WebSocket connected');
       this.ws.onclose = () => console.log('WebSocket closed');
       this.ws.onerror = (error) => console.error('WebSocket error:', error);
     },
     getStationNumber(position) {
+      if (!position || typeof position !== 'string' || !position.match(/DB\d+\.DBX/)) {
+        console.warn('Invalid position in Faults.vue:', position);
+        return -1;
+      }
       const dbNumber = parseInt(position.match(/DB(\d+)\.DBX/)[1], 10);
       return Math.floor((dbNumber - 1020) / 1000) + 1;
     }
   }
 };
 </script>
-
 <style>
 table { width: 100%; border-collapse: collapse; }
 th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }

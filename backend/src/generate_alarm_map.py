@@ -2,8 +2,8 @@ import pandas as pd
 import re, json
 
 df = pd.read_excel("backend/data/stn1HMIAlamrs.xlsx", sheet_name="Sheet1")
-
-def map_to_db_position(trigger_tag, trigger_bit, base_db=1020):
+print(df)
+def map_to_db_position(trigger_tag, trigger_bit, base_db=2020):
     match = re.match(r"([WA]W)(\d+)\(1\)", trigger_tag)
     if not match:
         return None
@@ -14,6 +14,7 @@ def map_to_db_position(trigger_tag, trigger_bit, base_db=1020):
         byte -= 1
         trigger_bit -= 8
     result = f"DB{base_db}.DBX{byte}.{trigger_bit}"
+    print(f"Mapping {trigger_tag} with bit {trigger_bit} to {result}")
     return result
 # Create mapping dictionary
 alarm_map = {}

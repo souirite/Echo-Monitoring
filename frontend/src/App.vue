@@ -1,7 +1,6 @@
 <template>
   <div class="app">
     <div class="menu">
-      <!-- Station Buttons -->
       <button
         v-for="station in 11"
         :key="'station-' + station"
@@ -14,23 +13,22 @@
       <button @click="setView('records')" :class="{ active: view === 'records' }">Records</button>
     </div>
     <div class="content">
-      <Faults v-if="view === 'faults'" />
-      <records v-if="view === 'records'" />
+      <Faults v-if="view === 'faults'" :selected-station="selectedStation" @faults-updated="updateFaults" />
+      <Records v-if="view === 'records'" />
     </div>
   </div>
 </template>
-
 <script>
 import Faults from './components/Faults.vue';
 import Records from './components/Records.vue';
 
 export default {
-  components: { Faults,Records },
+  components: { Faults, Records },
   data() {
     return {
       view: 'faults',
-      selectedStation: 1,  // Default to Station 1
-      stationFaults: {}    // Tracks active faults per station
+      selectedStation: 1,
+      stationFaults: {}
     };
   },
   methods: {
@@ -41,26 +39,33 @@ export default {
       this.selectedStation = station;
     },
     updateFaults(faults) {
+      console.log('Faults received in App.vue:', faults);
       this.stationFaults = {};
       faults.forEach(fault => {
         const station = this.getStationNumber(fault.position);
-        if (!this.stationFaults[station]) {
-          this.stationFaults[station] = [];
+        if (station !== -1) {  // Skip invalid stations
+          if (!this.stationFaults[station]) {
+            this.stationFaults[station] = [];
+          }
+          this.stationFaults[station].push(fault);
         }
-        this.stationFaults[station].push(fault);
       });
+      console.log('Updated stationFaults:', this.stationFaults);
     },
     hasFaults(station) {
       return this.stationFaults[station] && this.stationFaults[station].length > 0;
     },
     getStationNumber(position) {
+      if (!position || typeof position !== 'string' || !position.match(/DB\d+\.DBX/)) {
+        console.warn('Invalid position in App.vue:', position);
+        return -1;
+      }
       const dbNumber = parseInt(position.match(/DB(\d+)\.DBX/)[1], 10);
       return Math.floor((dbNumber - 1020) / 1000) + 1;
     }
   }
 };
 </script>
-
 <style>
 .app {
   display: flex;
